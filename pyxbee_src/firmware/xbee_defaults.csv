@@ -1,0 +1,7 @@
+at,name,alias,default,category,input_type,validator,validator_params,input_info,description
+WR,Write,write,,Special,,,,,Write the current configurable values to non-volitile memory
+RE,Restore,restore,,Special,,,,,Restore the firmware defaults
+FR,Force Reset,reset,,Special,,,,,Force an immediate reset
+VR,Firmware Version,firmware_version,,Diagnostics,,,,,Read firmware version from the hardware
+VL,Firmware Version Verbose,firmware_version_verbose,,Diagnostics,,,,,Read detailed version information
+HV,Hardware Version,hardware_version,,Diagnostics,,,,,Read the hardware version

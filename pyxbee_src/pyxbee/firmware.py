@@ -36,7 +36,7 @@ class Command:
     input=None
     category=None
     default=None
-    write=False
+    write=True
     read=True
     input_info=None
     description=None
@@ -107,18 +107,20 @@ class Firmware:
     
     def setCommand(self,command):
         self.commands[command.alias()]=command
-        self.commands[command.at]=command
+        self.commands[command.at.lower()]=command
         #TODO:Think about removing the at dict all together
         self.at_commands[command.at]=command
     
     def getCommand(self,name):
+        if isinstance(name, Command):
+            name=name.name
         return self.commands[name.lower()]
         
-    def __getattr__(self,name):
-        return self.getCommand(name)
+    #def __getattr__(self,name):
+    #    return self.getCommand(name)
     
-    def __setattr__(self,name,value):
-        command=self.getCommand(name)
+    #def __setattr__(self,name,value):
+    #    command=self.getCommand(name)
         
     
     def __str__(self):

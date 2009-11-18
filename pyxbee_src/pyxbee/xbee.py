@@ -224,7 +224,7 @@ class Call:
     
 def main():
     logging.basicConfig(level=logging.DEBUG)
-    xbee=XBee(XBeeSerialInterface('/dev/ttyUSB0',9600,timeout=2))
+    xbee=XBee(XBeeSerialInterface('/dev/ttyUSB0',9600,timeout=1))
     xbee.loadCommands('../firmware/xbee_defaults.csv')
     xbee.loadCommands('../firmware/XBP24_15_4_10C8.mxi')
     results=xbee.callCommands({'vr':None,'ct':255})

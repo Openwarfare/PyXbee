@@ -128,17 +128,3 @@ class Choice(Int):
         
     def __str__(self):
         return "<Choice:%s(%s)>"%(self.value,self.name(self.value))
-    
-class Packet:
-    type=None
-    data=None
-    checksum=None
-    
-    def write(self):
-        pass
-    
-    def read(self):
-        pass
-    
-    def checksum(self):
-        pass

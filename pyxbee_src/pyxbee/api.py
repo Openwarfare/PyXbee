@@ -55,16 +55,24 @@ class Packet:
             else:
                 packed.extend(value)
         return packed
-    
-    def __str__(self):
-        return self.encode()
 
+class FrameIdPacket(Packet):
+    current_id=0
+    
+    def generateFrameId(self):
+        if FrameIdPacket.current_id == 255:
+           FrameIdPacket.current_id=0
+        else: 
+            FrameIdPacket.current_id=FrameIdPacket.current_id+1
+        return FrameIdPacket.current_id
+    
 class ModemStatus(Packet):
     id=0x8a
     map={
          'status':(0,1)
          }
-    status_map=[
+    
+    status_names=[
                 'hardware_reset',
                 'watchdog_timer_reset',
                 'associated',
@@ -78,8 +86,8 @@ class ModemStatus(Packet):
         self.status=None
         self.unpack(data)
     
-    def status(self):
-        pass
+    def status_name(self):
+        return self.status_names[self.status]
     
 class CallATCommand(Packet):
     id=0x08
@@ -89,7 +97,7 @@ class CallATCommand(Packet):
          'value':(3,None)
          }
     
-    def __init__(self,data=None):
+    def __init__(self,data=None,command=None,frame_id=None):
         self.frame_id=None
         self.command=None
         self.value=None
@@ -103,14 +111,22 @@ class ATResponse(Packet):
     map={
          'frame_id':(0,1),
          'command':(1,3),
-         'value':(3,None)
+         'status':(4,5),
+         'value':(5,None)
          }
     
     def __init__(self,data):
         self.frame_id=None
         self.command=None
+        self.status=None
         self.value=None
         self.unpack(data)
+    
+    def ok(self):
+        return not bool(self.status)
+    
+    def error(self):
+        return bool(self.status)
         
 class TXRequest64(Packet):
     id=0x00
@@ -124,11 +140,17 @@ class TXRequest64(Packet):
     def __init__(self,data):
         self.frame_id=None
         self.destination=None
-        self.options=None
+        self.options=0x00
         self.data=None
         self.unpack(data)
     
-class TXRequest16(Packet):
+    def disable_ack(self):
+        self.options=self.options | 0x01
+    
+    def broadcast_pan_id(self):
+        self.options=self.options | 0x04
+        
+class TXRequest16(TXRequest64):
     id=0x01
     map={
          'frame_id':(0,1),
@@ -136,20 +158,20 @@ class TXRequest16(Packet):
          'options':(3,4),
          'data':(4,None)
          }
-    
-    def __init__(self,data):
-        self.frame_id=None
-        self.destination=None
-        self.options=None
-        self.data=None
-        self.unpack(data)
         
-class TXStatus(Packet):
+class TXStatus(ModemStatus):
     id=0x89
     map={
          'frame_id':(0,1),
          'status':(1,2)
          }
+    
+    status_names=[
+                  'success',
+                  'no_ack',
+                  'cca_failure',
+                  'purged'
+                  ]
     
     def __init__(self,data):
         self.frame_id=None
@@ -187,6 +209,11 @@ class RXPacket16(Packet):
         self.options=None
         self.data=None
         self.unpack(data)
+        
+def ensure_chr(byte):
+    if type(byte) is int:
+        return chr(byte)
+    return byte
 
 def encode_frame(data, escape=False, delimiter=0x7e):
     length=len(data)
@@ -197,7 +224,7 @@ def encode_frame(data, escape=False, delimiter=0x7e):
     if escape:
         data=escape(data)
     data=[delimiter]+data
-    return ''.join([chr(b) for b in data])
+    return ''.join([ensure_chr(b) for b in data])
 
 def decode_frame(data, escaped=False, delimiter=0x7e):
     if type(data) is str:
@@ -244,16 +271,20 @@ def checksum_ok(data, checksum=None):
         cs=cs+checksum
     return cs==0xff
 
-def serial_server(running,frames_in,frames_out):
-    with open("../../pyxbee_src/data/9mm/decock.log") as f:
-        while running.is_set():
-            b=f.read(1)
-            if ord(b) == 0x7e:
-                length=stack.unpack('>H',f.read(2))[0]
-                print('Length:%s'%length)
-        
-def serial_reader():
-    pass
+#def serial_server(running,data_in,frames_out):
+#    with open("../../pyxbee_src/data/9mm/decock.log") as f:
+#        while running.is_set():
+#            b=f.read(1)
+#            if ord(b) == 0x7e:
+#                
+#        
+#def serial_reader():
+#    with open("../../pyxbee_src/data/9mm/decock.log") as f:
+#        while running.is_set():
+#            b=f.read(1)
+#            if ord(b) == 0x7e:
+#                length=stack.unpack('>H',f.read(2))[0]
+#                print('Length:%s'%length)
 
 def main():
     packets=list()

@@ -86,7 +86,7 @@ class ModemStatus(Packet):
         self.status=None
         self.unpack(data)
     
-    def status_name(self):
+    def named_status(self):
         return self.status_names[self.status]
     
 class CallATCommand(Packet):
@@ -187,14 +187,31 @@ class RXPacket64(Packet):
          'data':(11,None)
          }
     
+    option_names={
+             'address_broadcast':0x40,
+             'pan_broadcast':0x20
+             }
+    
     def __init__(self,data):
         self.source=None
         self.rssi=None
-        self.options=None
+        self.options=0
         self.data=None
         self.unpack(data)
     
-class RXPacket16(Packet):
+    def named_options(self):
+        result=[]
+        for name, value in self.option_names.iteritems():
+            if self.options & value:
+                result.append(name)
+        return result
+    
+    def add_option(self,option):
+        if isinstance(option,str):
+            option=self.option_names(option)
+        self.options=self.options | option
+        
+class RXPacket16(RXPacket64):
     id=0x81
     map={
          'source':(0,2),

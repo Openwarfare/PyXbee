@@ -88,7 +88,8 @@ class Bits:
     
     def fromBits(self, bit_string):
         self.bit_string=bit_string
-        
+    
+    #TODO:make this a function
     def fromBytes(self,bytes, zfill=True):
         self.bit_string=''
         for byte in bytes:

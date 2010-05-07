@@ -1,5 +1,7 @@
 import struct
 import Queue
+import copy
+import logging as log
 #TODO: Think about reworking most of this.  It might be better to work with strings 
 #directly rather than breaking them up into lists only to turn them back into strings
 #TODO: Investigate dealing with these in a byte by byte manner for encoding.  It may 
@@ -10,25 +12,20 @@ import Queue
 
 ESCAPED_CHARS=[0x7e,0x7d,0x11,0x13]
 
-PACKET_IDS={
-            0x8a:ModemStatus,
-            0x08:CallATCommand,
-            0x09:QueueATCommand,
-            0x88:ATResponse,
-            0x00:TXRequest64,
-            0x01:TXRequest16,
-            0x89:TXStatus,
-            0x80:RXPacket64,
-            0x81:RXPacket16,
-            }
-
-class BadChecksum(Exception):
+class BadFrameLength(Exception):
     data=None
-    checksum=None
-    def __init__(self,data=None, checksum=None):
+    length=None
+    def __init__(self,data=None, length=None):
         self.data=data
+        self.length=length
+        
+class BadFrameChecksum(Exception):
+    checksum=None
+    data=None
+    def __init__(self,data=None, checksum=None):
         self.checksum=checksum
-
+        self.data=data
+    
 class Packet:
     id=None
     map={}
@@ -181,11 +178,35 @@ class TXStatus(ModemStatus):
 class RXPacket64(Packet):
     id=0x80
     map={
-         'source':(0,8),
+         'source_address':(0,8),
          'rssi':(9,10),
          'options':(10,11),
          'data':(11,None)
          }
+    
+    io_map={
+            'samples':(0,1),
+            'channels':(1,3),
+            'io_data':(4,None)
+            }
+    
+    channel_map={
+                'adc5':0x4000,
+                'adc4':0x2000,
+                'adc3':0x1000,
+                'adc2':0x800,
+                'adc1':0x400,
+                'adc0':0x200,
+                'dio8':0x100,
+                'dio7':0x80,
+                'dio6':0x40,
+                'dio5':0x20,
+                'dio4':0x10,
+                'dio3':0x8,
+                'dio2':0x4,
+                'dio1':0x2,
+                'dio0':0x1
+                }
     
     option_names={
              'address_broadcast':0x40,
@@ -210,11 +231,14 @@ class RXPacket64(Packet):
         if isinstance(option,str):
             option=self.option_names(option)
         self.options=self.options | option
-        
+    
+    def unpack_io(self):
+        pass
+    
 class RXPacket16(RXPacket64):
     id=0x81
     map={
-         'source':(0,2),
+         'source_address':(0,2),
          'rssi':(2,3),
          'options':(3,4),
          'data':(4,None)
@@ -226,7 +250,13 @@ class RXPacket16(RXPacket64):
         self.options=None
         self.data=None
         self.unpack(data)
-        
+
+class RXIOPacket64(RXPacket64):
+    id=0x82
+    
+class RXIOPacket16(RXPacket16):
+    id=0x83
+    
 def ensure_chr(byte):
     if type(byte) is int:
         return chr(byte)
@@ -243,7 +273,7 @@ def encode_frame(data, escape=False, delimiter=0x7e):
     data=[delimiter]+data
     return ''.join([ensure_chr(b) for b in data])
 
-def decode_frame(data, escaped=False, delimiter=0x7e):
+def decode_frame(data, escaped=False, delimiter=0x7e, ignore_checksum=False):
     if type(data) is str:
         data=[ord(c) for c in data]
     if data[0] == delimiter:
@@ -253,11 +283,16 @@ def decode_frame(data, escaped=False, delimiter=0x7e):
     length_msB=data.pop(0)
     length_lsB=data.pop(0)
     length=(length_msB<<8)|length_lsB
+    if length > len(data)-1:
+        raise BadFrameLength(data=data, length=length)
     checksum=data[length]
     data=data[:length]
-    if not checksum_ok(data, checksum):
-        raise BadChecksum(data,checksum)
+    if not checksum_ok(data, checksum) and not ignore_checksum:
+        raise BadFrameChecksum(data,checksum)
     return data
+
+def decode_packet(data):
+    pass
     
 def escape(data):
     escaped=[]
@@ -288,40 +323,42 @@ def checksum_ok(data, checksum=None):
         cs=cs+checksum
     return cs==0xff
 
-#def serial_server(running,data_in,frames_out):
-#    with open("../../pyxbee_src/data/9mm/decock.log") as f:
-#        while running.is_set():
-#            b=f.read(1)
-#            if ord(b) == 0x7e:
-#                
-#        
-#def serial_reader():
-#    with open("../../pyxbee_src/data/9mm/decock.log") as f:
-#        while running.is_set():
-#            b=f.read(1)
-#            if ord(b) == 0x7e:
-#                length=stack.unpack('>H',f.read(2))[0]
-#                print('Length:%s'%length)
+PACKET_IDS={
+            0x8a:ModemStatus,
+            0x08:CallATCommand,
+            0x09:QueueATCommand,
+            0x88:ATResponse,
+            0x00:TXRequest64,
+            0x01:TXRequest16,
+            0x89:TXStatus,
+            0x80:RXPacket64,
+            0x81:RXPacket16,
+            0x82:RXIOPacket64,
+            0x83:RXIOPacket16
+            }
 
 def main():
-    packets=list()
-    frame_data=list()
-    packet_found=False
-    with open("../../pyxbee_src/data/9mm/decock.log") as f:
+    frame_out=None
+    raw_frame=None
+    with open("../../pyxbee_src/data/9mm/five_aimed_fc_5.log") as f:
         b=f.read(1)
+        offset=1
         while b:
             if ord(b) == 0x7e:
-                length=struct.unpack('>H',f.read(2))[0]
-                print('Length:%s'%length)
-                #payload=f.read(length)
-                payload=[ord(chr) for chr in f.read(length)]
-                #print('Payload:%s'%payload)
-                checksum=f.read(1)
-                check=sum(payload)+ord(checksum)
-                if check&0xff==0xff:
-                    print('Checksum OK')
-                else:
-                    print('Checksum BAD')
-
+                if raw_frame != None:
+                    try:
+                        #print(frame_out)
+                        frame_out=decode_frame(raw_frame, ignore_checksum=False)
+                    except BadFrameChecksum as cs:
+                        print('Bad Checksum:%s at %s for %s'%(cs.checksum,offset,cs.data))
+                    except BadFrameLength as ip:
+                        print('Bad Frame Length:%s at %s for %s'%(ip.length,offset,ip.data))
+                raw_frame=b
+            else:
+                if raw_frame != None:
+                    raw_frame+=b
             b=f.read(1)
-            print(hex(ord(b)))
+            offset+=1
+        
+if __name__ == '__main__':
+    main()

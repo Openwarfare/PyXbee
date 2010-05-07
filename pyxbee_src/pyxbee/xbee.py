@@ -229,5 +229,6 @@ def main():
     xbee.loadCommands('../firmware/XBP24_15_4_10C8.mxi')
     results=xbee.callCommands({'vr':None,'ct':255})
     print results
+    
 if __name__ == '__main__':
     main()

@@ -1,7 +1,8 @@
 import struct
 import Queue
 import copy
-import logging as log
+import logging
+import xbee
 #TODO: Think about reworking most of this.  It might be better to work with strings 
 #directly rather than breaking them up into lists only to turn them back into strings
 #TODO: Investigate dealing with these in a byte by byte manner for encoding.  It may 
@@ -52,7 +53,10 @@ class Packet:
             else:
                 packed.extend(value)
         return packed
-
+    
+    def __repr__(self):
+        return str(self.__dict__)
+    
 class FrameIdPacket(Packet):
     current_id=0
     
@@ -214,7 +218,7 @@ class RXPacket64(Packet):
              }
     
     def __init__(self,data):
-        self.source=None
+        self.source_address=None
         self.rssi=None
         self.options=0
         self.data=None
@@ -245,7 +249,7 @@ class RXPacket16(RXPacket64):
          }
     
     def __init__(self,data):
-        self.source=None
+        self.source_address=None
         self.rssi=None
         self.options=None
         self.data=None
@@ -275,24 +279,36 @@ def encode_frame(data, escape=False, delimiter=0x7e):
 
 def decode_frame(data, escaped=False, delimiter=0x7e, ignore_checksum=False):
     if type(data) is str:
+        #logging.debug("Decoding String:%s"%data)
         data=[ord(c) for c in data]
+        #logging.debug("Decoded String:%s"%data)
     if data[0] == delimiter:
+        #logging.debug("Removing Delimter:%s"%data[0])
         data.pop(0)
+        #logging.debug("Removed Delimter:%s"%data)
     if escaped:
+        #logging.debug("Unescaping")
         data=unescape(data)
+        #logging.debug("Unescaped:%s"%data)
     length_msB=data.pop(0)
+    #logging.debug("Length MSB:%s"%length_msB)
     length_lsB=data.pop(0)
+    #logging.debug("Length LSB:%s"%length_lsB)
     length=(length_msB<<8)|length_lsB
+    #logging.debug("Length:%s"%length)
     if length > len(data)-1:
         raise BadFrameLength(data=data, length=length)
     checksum=data[length]
-    data=data[:length]
-    if not checksum_ok(data, checksum) and not ignore_checksum:
+    #logging.debug("Checksum:%s"%checksum)
+    #data=data[:length]
+    if not checksum_ok(data) and not ignore_checksum:
         raise BadFrameChecksum(data,checksum)
     return data
 
 def decode_packet(data):
-    pass
+    packet_type=PACKET_TYPES[data.pop(0)]
+    packet=packet_type(data)
+    logging.debug(packet)
     
 def escape(data):
     escaped=[]
@@ -319,11 +335,13 @@ def checksum(data):
 
 def checksum_ok(data, checksum=None):
     cs=sum(data)
+    #logging.debug("Data Sum:%s"%hex(cs))
     if checksum != None:
         cs=cs+checksum
+    cs=cs&0xff
     return cs==0xff
 
-PACKET_IDS={
+PACKET_TYPES={
             0x8a:ModemStatus,
             0x08:CallATCommand,
             0x09:QueueATCommand,
@@ -338,21 +356,23 @@ PACKET_IDS={
             }
 
 def main():
-    frame_out=None
+    logging.basicConfig(level=logging.DEBUG)
+    frame=None
     raw_frame=None
-    with open("../../pyxbee_src/data/9mm/five_aimed_fc_5.log") as f:
+    #with open("../../pyxbee_src/data/9mm/five_aimed_fc_5.log") as f:
+    with xbee.XBeeSerialInterface('/dev/ttyUSB0',9600,timeout=1) as f:
         b=f.read(1)
         offset=1
         while b:
             if ord(b) == 0x7e:
                 if raw_frame != None:
                     try:
-                        #print(frame_out)
-                        frame_out=decode_frame(raw_frame, ignore_checksum=False)
+                        frame=decode_frame(raw_frame, ignore_checksum=False)
+                        packet=decode_packet(frame)
                     except BadFrameChecksum as cs:
-                        print('Bad Checksum:%s at %s for %s'%(cs.checksum,offset,cs.data))
+                        logging.error('Bad Checksum:%s at %s for %s'%(cs.checksum,offset,cs.data))
                     except BadFrameLength as ip:
-                        print('Bad Frame Length:%s at %s for %s'%(ip.length,offset,ip.data))
+                        logging.error('Bad Frame Length:%s at %s for %s'%(ip.length,offset,ip.data))
                 raw_frame=b
             else:
                 if raw_frame != None:

@@ -23,7 +23,13 @@ class XBeeSerialInterface(serial.Serial):
     
     def connected(self):
         return self.isOpen()
-
+    
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, type, value, traceback):
+        self.close()
+        
 class XBee:
     
     at_mode=True

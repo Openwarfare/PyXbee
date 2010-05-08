@@ -359,8 +359,8 @@ def main():
     logging.basicConfig(level=logging.DEBUG)
     frame=None
     raw_frame=None
-    #with open("../../pyxbee_src/data/9mm/five_aimed_fc_5.log") as f:
-    with xbee.XBeeSerialInterface('/dev/ttyUSB0',9600,timeout=1) as f:
+    with open("../test/data/adc_not_escaped.log") as f:
+    #with xbee.XBeeSerialInterface('/dev/ttyUSB0',9600,timeout=1) as f:
         b=f.read(1)
         offset=1
         while b:

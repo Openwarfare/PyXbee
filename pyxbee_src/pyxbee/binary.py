@@ -13,24 +13,66 @@ data_map[0:]=StringData(('name','function'),':')
 base_map=Map('packet')
 base_map[0:2]=StringElement('id')
 base_map[2:4]=IntElement('length')
-base_map[4:base_map.element('length')]=Map('payload',data_map)
-base_map[base_map.element('length'):]=ChecksumElement('checksum',base_map.element('payload))
+base_map[4:'length']=data_map
+base_map['length':'length+1']=ChecksumElement('checksum',base_map.element('payload'))
 '''
 
 #1234name:areth4
+    
 class Map:
     
-    def __setitem__(self,key,value):
-        if issubclass(value,MapElement):
-            pass
-        print '%s:%s'%(key,value)
-        
-class MapElement:
+    def __init__(self, name=None, start=None, end=None):
+        self.ordered_elements = dict()
+        self.named_elements = dict()
+        self.name = name
+        self.start_index = start
+        self.end_index = end
+        self.parent = None
+        self.data = None
     
-    def __init__(self,name,start=None,end=None):
-        self.name=name
-        self.start=start
-        self.end=end
+    def __setitem__(self,key,value):
+        if issubclass(value.__class__, MapElement):
+            self.setElement(key.start, key.stop, value)
+    
+    def _resolve(self,value):
+        if callable(value):
+            return value()
+        if isinstance(value, str):
+            return self.findElement(value).value()
+            
+        return value
+    
+    def findElement(self,name):
+        if self.name==name:
+            return self
+        if self.named_elements.has_key(name):
+            return self.named_elements[name]
+            
+    def setElement(self, start, end, element):
+        element.start_index = start
+        element.end_index = end
+        self.named_elements[element.name]=element
+        self.ordered_elements[(element.start_index,element.end_index)]=element
+        
+    def value(self):
+        pass
+    
+    def start(self):
+        return self.start_index
+    
+    def end(self):
+        return self.end_index
+    
+    def length(self):
+        return len(self.data)
+    
+    def string(self):
+        pass
+    
+    def dump(self,tabs=0):
+        print("%s%s[%s:%s]"%('\t'*tabs,self.name,self.start(),self.end()))
+        for element in self.ordered_elements.itervalues():
+            element.dump(tabs+1)
         
         
 #TODO: Look into using lists instead of strings.
@@ -116,5 +158,7 @@ class Bits:
     def int(self):
         return int(self.bit_string,2)
 
-map=Map()
-map[0:2]='test'
+frame_data='~somedatahere'
+frame=MapElement('frame',0,'length')
+frame[0:]=MapElement('test')
+frame.dump()

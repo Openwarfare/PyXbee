@@ -21,6 +21,7 @@ class XBeeSerialInterface(serial.Serial):
             responses=responses+self.response()
         return responses
     
+    
     def connected(self):
         return self.isOpen()
     

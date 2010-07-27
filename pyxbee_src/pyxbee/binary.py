@@ -19,27 +19,26 @@ base_map['length':'length+1']=ChecksumElement('checksum',base_map.element('paylo
 
 #1234name:areth4
     
-class Map:
+class Map(MapElement):
     
-    def __init__(self, name=None, start=None, end=None):
+    def __init__(self, name):
         self.ordered_elements = dict()
         self.named_elements = dict()
-        self.name = name
-        self.start_index = start
-        self.end_index = end
-        self.parent = None
         self.data = None
     
     def __setitem__(self,key,value):
         if issubclass(value.__class__, MapElement):
+            value.parent = self
+            self.setElement(key.start, key.stop, value)
+            
+        if issubclass(value.__class__, Map):
             self.setElement(key.start, key.stop, value)
     
     def _resolve(self,value):
         if callable(value):
-            return value()
+            return value(self.data)
         if isinstance(value, str):
-            return self.findElement(value).value()
-            
+            return self.findElement(value).value(self.data)
         return value
     
     def findElement(self,name):
@@ -53,15 +52,6 @@ class Map:
         element.end_index = end
         self.named_elements[element.name]=element
         self.ordered_elements[(element.start_index,element.end_index)]=element
-        
-    def value(self):
-        pass
-    
-    def start(self):
-        return self.start_index
-    
-    def end(self):
-        return self.end_index
     
     def length(self):
         return len(self.data)
@@ -74,7 +64,27 @@ class Map:
         for element in self.ordered_elements.itervalues():
             element.dump(tabs+1)
         
+class MapElement():
+    
+    def __init__(self, name, start, end):
+        self.name = name
+        self.start_index = start
+        self.end_index = end
+        self.parent = None
         
+    def start(self):
+        return self.start_index
+    
+    def end(self):
+        return self.end_index
+    
+    def value(self, data):
+        pass
+    
+    def dump(self,tabs=0):
+        print("%s%s[%s:%s]"%('\t'*tabs,self.name,self.start(),self.end()))
+        for element in self.ordered_elements.itervalues():
+            element.dump(tabs+1)
 #TODO: Look into using lists instead of strings.
 class Bytes:
     

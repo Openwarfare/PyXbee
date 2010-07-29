@@ -16,8 +16,6 @@ base_map[2:4]=IntElement('length')
 base_map[4:'length']=data_map
 base_map['length':'length+1']=ChecksumElement('checksum',base_map.element('payload'))
 '''
-
-#1234name:areth4
     
 class Map(MapElement):
     
@@ -41,11 +39,19 @@ class Map(MapElement):
             return self.findElement(value).value(self.data)
         return value
     
+    def _resolve_str(self,value):
+        values = value.split('.')
+        if len(values) == 1:
+            element = self.findElement(values[0])
+        raise Exception("You are not done yet")
+            #TODO::Finish
+        
     def findElement(self,name):
         if self.name==name:
             return self
         if self.named_elements.has_key(name):
             return self.named_elements[name]
+        raise KeyError(name)
             
     def setElement(self, start, end, element):
         element.start_index = start
@@ -66,26 +72,34 @@ class Map(MapElement):
         
 class MapElement():
     
-    def __init__(self, name, start, end):
+    def __init__(self, name, start_index, end_index = 'length'):
         self.name = name
         self.start_index = start
         self.end_index = end
+        self.type = str
         self.parent = None
         
     def start(self):
+        if parent:
+            return self.parent.start() + self.start_index
         return self.start_index
     
     def end(self):
+        if parent:
+            return self.parent.start() + self.end_index
         return self.end_index
     
+    def length(self):
+        return 
     def value(self, data):
-        pass
+        return data[self.start():self.end()]
     
     def dump(self,tabs=0):
         print("%s%s[%s:%s]"%('\t'*tabs,self.name,self.start(),self.end()))
         for element in self.ordered_elements.itervalues():
             element.dump(tabs+1)
-#TODO: Look into using lists instead of strings.
+
+
 class Bytes:
     
     def __init__(self, bytes, default_repr=str):
@@ -169,6 +183,7 @@ class Bits:
         return int(self.bit_string,2)
 
 frame_data='~somedatahere'
+frame = Map('frame',0)
 frame=MapElement('frame',0,'length')
 frame[0:]=MapElement('test')
 frame.dump()

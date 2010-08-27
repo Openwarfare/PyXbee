@@ -16,10 +16,42 @@ base_map[2:4]=IntElement('length')
 base_map[4:'length']=data_map
 base_map['length':'length+1']=ChecksumElement('checksum',base_map.element('payload'))
 '''
+class ElementExists(Exception):
+    pass
+
+
+class MapElement():
+    
+    def __init__(self, name, start_index = 0, end_index = 'length'):
+        self.name = name
+        self.start_index = start_index
+        self.end_index = end_index
+        self.type = str
+        self.parent = None
+        
+    def start(self):
+        if self.parent is not None:
+            return self.parent.start() + self.start_index
+        return self.start_index
+    
+    def end(self):
+        if self.parent is not None:
+            return self.parent.start() + self.end_index
+        return self.end_index
+    
+    def length(self):
+        return -1
+    
+    def value(self, data):
+        return data[self.start():self.end()]
+    
+    def dump(self,tabs=0):
+        print("%s%s[%s:%s]"%('\t'*tabs,self.name,self.start(),self.end()))
     
 class Map(MapElement):
     
     def __init__(self, name):
+        MapElement.__init__(self, name)
         self.ordered_elements = dict()
         self.named_elements = dict()
         self.data = None
@@ -27,10 +59,10 @@ class Map(MapElement):
     def __setitem__(self,key,value):
         if issubclass(value.__class__, MapElement):
             value.parent = self
-            self.setElement(key.start, key.stop, value)
+            self.setElement(value, key.start, key.stop)
             
         if issubclass(value.__class__, Map):
-            self.setElement(key.start, key.stop, value)
+            self.setElement(value, key.start, key.stop)
     
     def _resolve(self,value):
         if callable(value):
@@ -39,12 +71,14 @@ class Map(MapElement):
             return self.findElement(value).value(self.data)
         return value
     
-    def _resolve_str(self,value):
-        values = value.split('.')
-        if len(values) == 1:
-            element = self.findElement(values[0])
-        raise Exception("You are not done yet")
-            #TODO::Finish
+    def _resolve_str(self,values):
+        if type(values) is str:
+            values = values.split('.')
+        value = self._resolve(values[0])
+        values=values[1:]
+        if not values :
+            return value
+        return self._resolve_str(values)
         
     def findElement(self,name):
         if self.name==name:
@@ -53,9 +87,14 @@ class Map(MapElement):
             return self.named_elements[name]
         raise KeyError(name)
             
-    def setElement(self, start, end, element):
-        element.start_index = start
-        element.end_index = end
+    def setElement(self, element, start= None, end = None):
+        #TODO:Also allow namespaced names map.element.subelement
+        if self.named_elements.has_key(element.name):
+            raise ElementExists()
+        if start != None:
+            element.start_index = start
+        if end != None:
+            element.end_index = end
         self.named_elements[element.name]=element
         self.ordered_elements[(element.start_index,element.end_index)]=element
     
@@ -69,36 +108,6 @@ class Map(MapElement):
         print("%s%s[%s:%s]"%('\t'*tabs,self.name,self.start(),self.end()))
         for element in self.ordered_elements.itervalues():
             element.dump(tabs+1)
-        
-class MapElement():
-    
-    def __init__(self, name, start_index, end_index = 'length'):
-        self.name = name
-        self.start_index = start
-        self.end_index = end
-        self.type = str
-        self.parent = None
-        
-    def start(self):
-        if parent:
-            return self.parent.start() + self.start_index
-        return self.start_index
-    
-    def end(self):
-        if parent:
-            return self.parent.start() + self.end_index
-        return self.end_index
-    
-    def length(self):
-        return 
-    def value(self, data):
-        return data[self.start():self.end()]
-    
-    def dump(self,tabs=0):
-        print("%s%s[%s:%s]"%('\t'*tabs,self.name,self.start(),self.end()))
-        for element in self.ordered_elements.itervalues():
-            element.dump(tabs+1)
-
 
 class Bytes:
     
@@ -182,8 +191,12 @@ class Bits:
     def int(self):
         return int(self.bit_string,2)
 
-frame_data='~somedatahere'
-frame = Map('frame',0)
-frame=MapElement('frame',0,'length')
-frame[0:]=MapElement('test')
+frame_data='~\x04data\xcc'
+frame = Map('frame')
+frame.setElement(MapElement('delim',0,1))
+data = Map('data')
+data.setElement(MapElement('data_length',0,1))
+data.setElement(MapElement('data_payload',2,'data_length'))
+frame.setElement(data,2,'data.end')
+frame.setElement(MapElement('checksum','data.end','end'))
 frame.dump()

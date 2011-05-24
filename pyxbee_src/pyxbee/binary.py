@@ -4,110 +4,118 @@ Created on Jan 18, 2010
 @author: afosterw
 
 Binary Map Example
-
-1210255areth:test456
-
-data_map=Map('payload')
-data_map[0:]=StringData(('name','function'),':')
-
-base_map=Map('packet')
-base_map[0:2]=StringElement('id')
-base_map[2:4]=IntElement('length')
-base_map[4:'length']=data_map
-base_map['length':'length+1']=ChecksumElement('checksum',base_map.element('payload'))
 '''
 class ElementExists(Exception):
     pass
 
 
-class MapElement():
+
+class Datamap:
+    """
+    >>> data = "add033255"
+    >>> d = Datamap("line")
+    >>> d[0:3] = Datamap("action")
+    >>> d[3:6] = Datamap('num_1',int)
+    >>> d[6:None] = Datamap('num_2', int)
+    >>> d.load(data)
+    >>> d.action
+    add
+    >>> d.num_1
+    33
+    >>> d.num_2
+    255
+    """
     
-    def __init__(self, name, start_index = 0, end_index = 'length'):
+    def __init__(self, name,  map_type=str, start_index = 0, end_index = None):
         self.name = name
+        self._data = None
         self.start_index = start_index
         self.end_index = end_index
-        self.type = str
         self.parent = None
+        self.children = dict()
+        self.children_names = dict()
+        self.map_type = map_type
+    
+    def __setslice__(self,i,j,datamap):
+        if not isinstance(datamap,Datamap) :
+            raise NotDatamapInstance
+        datamap.start_index = i
+        datamap.end_index = j
+        self.add_child(datamap)
+    
+    def __setitem__(self,key,value):
+        if type(key) is slice:
+            if not isinstance(value,Datamap) :
+                raise NotDatamapInstance
+            value.start_index = key.start
+            value.end_index = key.stop
+            self.add_child(value)
         
+    def load(self,data):
+        self._data=data
+    
+    def add_child(self, map):
+        map.parent = self
+        self.children_names[map.name] = map
+        end = map.end()
+        if map.end_index is None:
+            end = self.length()
+            
+        for i in range(map.start(),end):
+            self.children[(map.span())]=map
+            
     def start(self):
         if self.parent is not None:
-            return self.parent.start() + self.start_index
+            return self.start_index + self.parent.start()
         return self.start_index
     
     def end(self):
+        if self.end_index is None:
+            return None
         if self.parent is not None:
             return self.parent.start() + self.end_index
         return self.end_index
     
     def length(self):
-        return -1
+        if self._data is None:
+            return 0
+        return len(self._data)
     
-    def value(self, data):
-        return data[self.start():self.end()]
-    
-    def dump(self,tabs=0):
-        print("%s%s[%s:%s]"%('\t'*tabs,self.name,self.start(),self.end()))
-    
-class Map(MapElement):
-    
-    def __init__(self, name):
-        MapElement.__init__(self, name)
-        self.ordered_elements = dict()
-        self.named_elements = dict()
-        self.data = None
-    
-    def __setitem__(self,key,value):
-        if issubclass(value.__class__, MapElement):
-            value.parent = self
-            self.setElement(value, key.start, key.stop)
-            
-        if issubclass(value.__class__, Map):
-            self.setElement(value, key.start, key.stop)
-    
-    def _resolve(self,value):
-        if callable(value):
-            return value(self.data)
-        if isinstance(value, str):
-            return self.findElement(value).value(self.data)
-        return value
-    
-    def _resolve_str(self,values):
-        if type(values) is str:
-            values = values.split('.')
-        value = self._resolve(values[0])
-        values=values[1:]
-        if not values :
-            return value
-        return self._resolve_str(values)
-        
-    def findElement(self,name):
-        if self.name==name:
+    def root(self):
+        if self.parent is None:
             return self
-        if self.named_elements.has_key(name):
-            return self.named_elements[name]
-        raise KeyError(name)
-            
-    def setElement(self, element, start= None, end = None):
-        #TODO:Also allow namespaced names map.element.subelement
-        if self.named_elements.has_key(element.name):
-            raise ElementExists()
-        if start != None:
-            element.start_index = start
-        if end != None:
-            element.end_index = end
-        self.named_elements[element.name]=element
-        self.ordered_elements[(element.start_index,element.end_index)]=element
+        return self.parent.root()
     
-    def length(self):
-        return len(self.data)
+    def data(self):
+        try:
+            return self.root()._data[self.start():self.end()]
+        except TypeError:
+            raise NoData('There is no data in this map')
     
-    def string(self):
-        pass
+    def value(self):
+        return self.map_type(self.data())
     
-    def dump(self,tabs=0):
-        print("%s%s[%s:%s]"%('\t'*tabs,self.name,self.start(),self.end()))
-        for element in self.ordered_elements.itervalues():
-            element.dump(tabs+1)
+    def span(self):
+        return (self.start(),self.end())
+    
+    def __getattr__(self,name):
+        return self.children_names[name]
+    
+    def __repr__(self):
+        return str(self.value())
+    
+    def dump_string(self,depth=0):
+        dump=' '*depth+'%s:(%s:%s)\n'%(self.name,self.start(),self.end())
+        for child in self.children_names.itervalues():
+            dump+=child.dump_string(depth+1)
+        return dump
+
+    def __str__(self):
+        return self.dump_string()
+    
+    def __unicode__(self):
+        return self.dump_string()
+
 
 class Bytes:
     
@@ -167,6 +175,7 @@ class Bits:
     #TODO:make this a function
     def fromBytes(self,bytes, zfill=True):
         self.bit_string=''
+        
         for byte in bytes:
             if type(byte) is str:
                 byte=ord(byte)
@@ -174,7 +183,7 @@ class Bits:
             if zfill:
                 byte=byte.zfill(self.byte_size)
             self.bit_string+=byte
-
+        
     def bytes(self,left_to_right=True):
         #print('toBytes')
         offset = 0
@@ -190,13 +199,19 @@ class Bits:
     
     def int(self):
         return int(self.bit_string,2)
+    
+    def hex(self):
+        return hex(self.int())
+    
+    def concatinate(self, bits):
+        return Bits(bits = self.bit_string + bits.bits_string)
+        
+    def l_and(self,bits):
+        return Bits()
 
-frame_data='~\x04data\xcc'
-frame = Map('frame')
-frame.setElement(MapElement('delim',0,1))
-data = Map('data')
-data.setElement(MapElement('data_length',0,1))
-data.setElement(MapElement('data_payload',2,'data_length'))
-frame.setElement(data,2,'data.end')
-frame.setElement(MapElement('checksum','data.end','end'))
-frame.dump()
+def _test():
+    import doctest
+    doctest.testmod()
+
+if __name__ == "__main__":
+    _test()

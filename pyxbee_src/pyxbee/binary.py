@@ -1,30 +1,18 @@
 '''
 Created on Jan 18, 2010
-
 @author: afosterw
-
-Binary Map Example
 '''
+
 class ElementExists(Exception):
     pass
 
+class NotDatamapInstance(Exception):
+    pass
 
+class NoData(Exception):
+    pass
 
 class Datamap:
-    """
-    >>> data = "add033255"
-    >>> d = Datamap("line")
-    >>> d[0:3] = Datamap("action")
-    >>> d[3:6] = Datamap('num_1',int)
-    >>> d[6:None] = Datamap('num_2', int)
-    >>> d.load(data)
-    >>> d.action
-    add
-    >>> d.num_1
-    33
-    >>> d.num_2
-    255
-    """
     
     def __init__(self, name,  map_type=str, start_index = 0, end_index = None):
         self.name = name
@@ -120,11 +108,12 @@ class Datamap:
 class Bytes:
     
     def __init__(self, bytes, default_repr=str):
-        self.repr=default_repr
-        self.bytes=bytes
+        self.repr_type=default_repr
+        #TODO:Think about not always representing bytes as a string...
+        self.bytes=str(bytes)
     
     def __getitem__(self,key):
-        return Bytes(self.bytes.__getitem__(key))
+        return Bytes(self.bytes.__getitem__(key),self.repr_type)
     
     def __setitem__(self,key,value):
         tmp_bytes=list(self.bytes)
@@ -132,21 +121,21 @@ class Bytes:
         self.bytes=''.join(tmp_bytes)
     
     def __repr__(self):
-        return self.repr(self.bytes)
+        return self.repr_type(self.bytes)
     
     def __str__(self):
-        return str(self.repr(self.bytes))
+        return str(self.repr_type(self.bytes))
     
     def bits(self):
         return Bits(bytes=self.bytes)
     
 class Bits:
     
-    def __init__(self,bytes=None, byte_size=8, bits=None):
+    def __init__(self, bytes=None, bits=None, byte_size=8, zfill = True):
         self.bit_string=None
         self.byte_size=byte_size
         if bytes != None:
-            self.fromBytes(bytes)
+            self.fromBytes(bytes, zfill)
             
         if bits != None:
             self.fromBits(bits)
@@ -172,19 +161,22 @@ class Bits:
     def fromBits(self, bit_string):
         self.bit_string=bit_string
     
-    #TODO:make this a function
-    def fromBytes(self,bytes, zfill=True):
+    #TODO:handle nested structures
+    def fromBytes(self, bytes, zfill=True):
         self.bit_string=''
-        
-        for byte in bytes:
-            if type(byte) is str:
-                byte=ord(byte)
-            byte=bin(byte)[2:]
-            if zfill:
-                byte=byte.zfill(self.byte_size)
-            self.bit_string+=byte
-        
-    def bytes(self,left_to_right=True):
+        if type(bytes) is int:
+            self.bit_string = intToBinString(bytes)
+            
+        if type(bytes) is str or type(bytes) is unicode or hasattr(bytes,"__iter__"):
+            for byte in bytes:
+                if type(byte) is str or type(byte) is unicode:
+                    byte=ord(byte)
+                self.bit_string+=intToBinString(byte, zfill)
+    
+    def zfill_byte(self, byte):
+        return zfill_byte(byte,self.byte_size)
+    
+    def bytes(self,left_to_right=True, unicode = False):
         #print('toBytes')
         offset = 0
         size=len(self.bit_string)/self.byte_size
@@ -193,7 +185,10 @@ class Bits:
             #print('offset:%s:size:%s'%(offset,size))
             chunk=self.bit_string[offset*self.byte_size:((offset+1)*self.byte_size)]
             #print chunk
-            string+=chr(int(chunk,2))
+            if unicode:
+                string+=unichr(int(chunk,2))
+            else :
+                string+=chr(int(chunk,2))
             offset+=1
         return Bytes(string)
     
@@ -203,15 +198,35 @@ class Bits:
     def hex(self):
         return hex(self.int())
     
+    def bin(self):
+        return bin(self.int())
+    
     def concatinate(self, bits):
-        return Bits(bits = self.bit_string + bits.bits_string)
+        return Bits(bits = self.bit_string + bits.bit_string)
         
-    def l_and(self,bits):
-        return Bits()
+    def bitwise_and(self,bits, zfill = True):
+        result = self.int() & bits.int()
+        return Bits(bytes = result, zfill = zfill)
+    
+    def bitwise_or(self, bits, zfill = True):
+        result = self.int() | bits.int()
+        return Bits(bytes = result, zfill = zfill)
+    
+    def bitwise_xor(self, bits, zfill = True):
+        result = self.int() ^ bits.int()
+        return Bits(bytes = result, zfill = zfill)
+    
+    def bitwise_shift_left(self, num_bits):
+        return Bits(self.int() << num_bits)
+    
+    def bitwise_shift_right(self, num_bits):
+        return Bits(self.int() >> num_bits)
+    
+def intToBinString(integer, zfill = True, byte_size = 8):
+    result=bin(integer)[2:]
+    if zfill:
+        result = result.zfill(byte_size)
+    return result
 
-def _test():
-    import doctest
-    doctest.testmod()
-
-if __name__ == "__main__":
-    _test()
+def zfill_byte(self, byte, byte_size = 8):
+    return byte.zfill(byte_size)

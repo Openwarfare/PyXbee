@@ -58,7 +58,7 @@ class BytesIntTestCase(unittest.TestCase):
     def testSlice(self):
         self.assertTrue(isinstance(self.bytes[0:2],binary.Bytes))
         
-    def testIter(self):
+    def testIteration(self):
         for byte in self.bytes:
             self.assertTrue(isinstance(byte,binary.Bytes))
     
@@ -70,6 +70,59 @@ class BitsTestCase(unittest.TestCase):
     
     def setUp(self):
         pass
-
+    
+    def testBitInit(self):
+        bits =  binary.Bits('a')
+        self.assertEqual("01100001",str(bits))
+        
+        bits =  binary.Bits(u'a')
+        self.assertEqual("01100001",str(bits))
+        
+        bits =  binary.Bits('areth')
+        self.assertEqual("0110000101110010011001010111010001101000",str(bits))
+        
+        bits =  binary.Bits(u'areth')
+        self.assertEqual("0110000101110010011001010111010001101000",str(bits))
+        
+        bits = binary.Bits(255)
+        self.assertEqual("11111111",bits.bit_string)
+    
+    def testCasting(self):
+        bits = binary.Bits('a')
+        self.assertEqual(bits.bin(), bin(ord('a')))
+        self.assertEqual(bits.hex(), hex(ord('a')))
+        self.assertEqual(bits.int(), ord('a'))
+        self.assertTrue(isinstance(bits.bytes(), binary.Bytes))
+        #TODO::Fix this when bits and bytes have equality operators
+        self.assertEqual(str(bits.bytes()), str(binary.Bytes("a")))
+    
+    def testSlices(self):
+        bits =  binary.Bits('areth')
+        self.assertEqual("01", str(bits[0:2]))
+        bits =  binary.Bits(255)
+        self.assertEqual("11111111", str(bits[0:8]))
+        bits[0:2] = "00"
+        self.assertEqual("00111111", str(bits))
+        
+    def testIteration(self):
+        bits =  binary.Bits('areth')
+        test = ""
+        for b in bits:
+            test += str(b)
+        self.assertEqual(test, str(bits))
+    
+    def testLogic(self):
+        bits = binary.Bits(0b10101010)
+        self.assertEqual("10101010",str(bits.bitwise_and(binary.Bits(0b11111111))))
+        self.assertEqual("11111111",str(bits.bitwise_or(binary.Bits(0b11111111))))
+        self.assertEqual("01010101",str(bits.bitwise_xor(binary.Bits(0b11111111))))
+        self.assertEqual("00010101",str(bits.bitwise_shift_right(3)))
+        self.assertEqual("10101010000",str(bits.bitwise_shift_left(3)))
+    
+    def testConcatination(self):
+        bits = binary.Bits(255)
+        self.assertEqual("1111111110101010",str(bits.concatinate(binary.Bits(170))))
+        self.assertEqual(65450,bits.concatinate(binary.Bits(170)).int())
+                         
 if __name__ == '__main__':
     unittest.main()
